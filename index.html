@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>合唱練習混音器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <header class="topbar">
+    <a class="brand" href="#player-view" aria-label="回到播放介面">
+      <span class="brand-mark">♪</span>
+      <span>合唱練習混音器</span>
+    </a>
+    <button id="admin-toggle" class="ghost-button" type="button" aria-controls="admin-view"
+      aria-expanded="false">管理介面</button>
+  </header>
+
+  <main class="app-shell">
+    <section id="player-view" class="view">
+      <section class="song-panel" aria-labelledby="song-title">
+        <p id="song-year" class="meta-text">目前指定曲</p>
+        <h1 id="song-title">載入中</h1>
+        <p id="song-updated" class="sub-text">正在讀取歌曲資料</p>
+      </section>
+
+      <section class="transport-panel" aria-label="播放控制">
+        <div class="timeline-row">
+          <span id="current-time">0:00</span>
+          <input id="progress" type="range" min="0" max="0" value="0" step="0.1" aria-label="播放進度">
+          <span id="duration">0:00</span>
+        </div>
+
+        <div class="button-row">
+          <button id="backward" class="primary-button secondary" type="button">-10s</button>
+          <button id="play-toggle" class="primary-button" type="button">播放</button>
+          <button id="forward" class="primary-button secondary" type="button">+10s</button>
+        </div>
+      </section>
+
+      <section class="tracks-section" aria-labelledby="tracks-heading">
+        <div class="section-heading">
+          <h2 id="tracks-heading">聲部音量</h2>
+          <p id="player-status" class="status-text" role="status">等待歌曲資料</p>
+        </div>
+        <div id="tracks-list" class="tracks-list"></div>
+      </section>
+    </section>
+
+    <section id="admin-view" class="view is-hidden" aria-labelledby="admin-heading">
+      <section class="admin-panel">
+        <div class="section-heading">
+          <div>
+            <p class="meta-text">管理介面</p>
+          </div>
+        </div>
+
+        <form id="current-song-form" class="upload-form">
+          <h2>選擇目前顯示歌曲</h3>
+            <select id="current-song-select" name="song_id"></select>
+            <button class="primary-button secondary" type="submit">切換歌曲</button>
+            <p id="current-song-status" class="status-text" role="status">正在讀取歌曲清單</p>
+        </form>
+
+        <form id="upload-form" class="upload-form">
+
+          <h2 id="admin-heading">上傳歌曲與聲部音檔</h2>
+
+
+
+          <label>
+            <span>歌曲名稱</span>
+            <input id="admin-title" name="title" type="text" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>聲部名稱</span>
+            <input name="track_name" type="text" placeholder="例如 soprano、alto、tempo" autocomplete="off" required>
+          </label>
+
+          <label>
+            <span>音檔</span>
+            <input name="audio" type="file" accept="audio/*" required>
+          </label>
+
+          <button class="primary-button" type="submit">上傳</button>
+          <p id="upload-status" class="status-text" role="status">尚未上傳</p>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,7 @@
+.env
+firebase-service-account*.json
+*firebase-adminsdk*.json
+node_modules/
+uploads/
+public/*.mp3
+public/*.wav

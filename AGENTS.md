@@ -1,0 +1,246 @@
+# 合唱練習網站 AGENTS.md
+
+## 專案目標
+
+這個專案是給合唱團員練習指定曲使用的網站。核心功能分成三個部分：
+
+- 前端使用者介面：讓團員播放歌曲、調整各聲部音量、Mute、Solo 與跳轉時間。
+- 管理者介面：讓管理者上傳歌曲名稱與各聲部音檔。
+- 後端 `server.js`：管理 Firestore 歌曲資料與 Firebase Storage 音檔儲存，提供前端讀取與上傳 API。
+
+功能要保持簡單，未來幹部只需要透過管理者介面更新歌曲與音檔，不需要修改複雜程式。
+
+## 回覆與文件風格
+
+- 專案說明與交接文件使用繁體中文。
+- 檔名、資料夾名稱、設定鍵值使用英文小寫、數字、底線或連字號。
+- 不使用中文檔名、空白或特殊符號。
+- 程式碼保持短小、清楚、容易交接，不過度抽象化。
+- 介面文字以合唱團員能直接理解為主，不使用太多技術詞。
+
+## 建議檔案結構
+
+```text
+choir-practice/
+├── AGENTS.md
+├── index.html
+├── styles.css
+├── app.js
+├── server.js
+├── package.json
+├── .env.example
+└── public/
+```
+
+如需暫存上傳檔案，使用 `uploads/`。實際正式音檔應存到 Firebase Storage，不應依賴本機資料夾作為正式資料來源。
+
+## 前端使用者介面
+
+首頁是團員練習使用的播放介面，需包含：
+
+- 歌曲名稱。
+- 播放進度條。
+- 目前時間與總長度。
+- 播放與暫停按鈕。
+- 往前跳轉 `10` 秒按鈕。
+- 往後跳轉 `10` 秒按鈕。
+- 每個聲部一條音量 bar。
+- 每個聲部一個 `Mute` 按鈕。
+- 每個聲部一個 `Solo` 按鈕。
+- 右上角有切換到管理者介面的按鈕。
+
+前端要從後端 API 取得目前歌曲資料與聲部音檔，不要把歌曲資料寫死在 HTML 裡。
+
+## 播放邏輯
+
+- 所有聲部音檔要同步播放、暫停與跳轉。
+- 拖曳進度條時，所有聲部都要跳到同一個時間。
+- 往前跳轉 `10` 秒不可小於 `0` 秒。
+- 往後跳轉 `10` 秒不可超過歌曲總長度。
+- 每個聲部音量 bar 控制該聲部的一般播放音量。
+- `Mute` 只影響被靜音的聲部。
+- `Solo` 不要把其他聲部完全靜音。
+- 只能一個聲部開啟 `Solo`：
+  - 被 Solo 的聲部實際音量為 `90%`。
+  - 沒有被 Solo 的聲部實際音量為 `20%`。
+  - 被 `Mute` 的聲部仍然維持靜音。
+- `Solo`沒有開關，按了就直接觸發即可
+
+## 管理者介面
+
+管理者介面只保留必要欄位：
+
+- 歌曲名稱。
+- 聲部名稱。
+- 對應音檔。
+- 上傳按鈕。
+
+管理者可重複新增多個聲部音檔。每個音檔都必須填寫聲部名稱可以自訂，例如：
+
+- `soprano`
+- `alto`
+- `tenor`
+- `bass`
+- `piano`
+- `tempo`
+
+管理者介面暫時不需要帳號系統、留言板、練習紀錄、AI 評分或複雜後台。
+
+## 後端需求
+
+後端使用 `server.js` 撰寫，建議使用 Node.js 與 Express。
+
+後端負責：
+
+- 接收管理者介面上傳的歌曲名稱、聲部名稱與音檔。
+- 將音檔存進 Firebase Storage。
+- 將歌曲名稱、聲部名稱、音檔在 Storage 裡的 `storage_path`、更新時間等資訊存進 Firestore。
+- 提供 API 給前端讀取目前歌曲與所有聲部資訊。
+- 避免讓前端直接持有 Firebase Admin 權限。
+
+音檔二進位資料必須存放在 Firebase Storage。Firestore 只保存歌曲資訊、聲部資訊與 `storage_path`，不要把音檔二進位內容直接存進資料庫。
+
+## Firebase 資料規則
+
+Firebase 是整套後端平台，不是單一資料庫。本專案使用其中兩個服務：
+
+- Firestore：Firebase 裡的資料庫，用來保存歌曲名稱、聲部名稱、音檔位置與更新時間。
+- Firebase Storage：Firebase 裡的檔案儲存空間，用來保存 `mp3`、`wav` 等音檔。
+
+本專案資料分工如下：
+
+- 音檔：存放在 Firebase Storage。
+- 歌曲資料、聲部名稱、音檔位置：存放在 Firestore。
+- 前端資料來源：只呼叫 `server.js` 提供的 API。
+
+Firestore 只保存管理用資料，不保存前端播放用網址，也不保存音檔本身。資料至少包含：
+
+```json
+{
+  "name": "soprano",
+  "storage_path": "songs/current/soprano.mp3",
+  "volume": 0.8
+}
+```
+
+`storage_path` 是後端在 Firebase Storage 裡找檔案的位置，例如：
+
+```text
+songs/current/soprano.mp3
+```
+
+不要在 Firestore 同時保存 `file_url` 和 `storage_path`。`file_url` 是前端可播放網址，容易和 Storage 裡的實際檔案位置不同步，所以本專案資料庫只保存 `storage_path`。
+
+`GET /api/song` 回傳給前端時，由 `server.js` 把 `storage_path` 轉成前端可播放的 `audio_url`：
+
+```json
+{
+  "name": "soprano",
+  "audio_url": "https://...",
+  "volume": 0.8
+}
+```
+
+Firestore 建議結構：
+
+```text
+songs/current
+songs/current/tracks/{track_id}
+```
+
+Firebase Storage 建議結構：
+
+```text
+songs/current/{track_name}.mp3
+```
+
+同一時間以前端顯示一首目前指定曲為主，不需要先做多年度、多歌曲清單、Realtime Database 或搜尋功能。
+
+## API 建議
+
+`server.js` 至少提供：
+
+- `GET /api/song`：取得目前歌曲名稱與所有聲部資料。
+- `POST /api/song`：上傳或更新歌曲名稱與聲部音檔。
+
+`POST /api/song` 可使用 `multipart/form-data`，欄位包含：
+
+- `title`：歌曲名稱。
+- `track_name`：聲部名稱。
+- `audio`：音檔。
+
+若一次上傳多個聲部，也可以使用陣列欄位，但實作要保持簡單清楚。
+
+
+## 音檔規範
+
+- 所有聲部音檔必須從同一個剪輯專案匯出。
+- 所有音檔必須從第 `0` 秒開始。
+- 不可以裁掉前面的空白。
+- 不同聲部的總長度應盡量一致。
+- 建議使用 `mp3`，需要高音質時才使用 `wav`。
+- 上傳前先用一般播放器檢查一次，上傳後再用網站測試一次。
+
+## 開發原則
+
+- 優先使用原生 HTML、CSS、JavaScript。
+- 後端維持單一 `server.js`，除非程式明顯過長才拆檔。
+- 不加入帳號系統、留言板、練習紀錄、AI 評分等非必要功能。
+- 新功能必須不影響「未來幹部只透過管理者介面更新」的原則。
+- Firebase 金鑰與敏感設定放在 `.env`，不要寫死在前端或提交到版本控制。
+- 前端只能呼叫後端 API，不直接使用 Firebase Admin SDK。
+- 前端只使用 API 回傳的 `audio_url` 播放音檔，不需要知道 Firebase Storage 的 `storage_path`。
+
+## 測試清單
+
+修改播放邏輯時，必須測試：
+
+- 播放。
+- 暫停。
+- 拖曳進度條。
+- 往前跳轉 `10` 秒。
+- 往後跳轉 `10` 秒。
+- 各聲部音量 bar。
+- `Mute`。
+- `Solo`：Solo 聲部為 `90%`，其他聲部為 `20%`。
+- 多個聲部同時 Solo。
+- Mute 與 Solo 同時存在時，Mute 優先。
+
+修改管理者介面或後端時，必須測試：
+
+- 可輸入歌曲名稱。
+- 可輸入聲部名稱。
+- 可上傳音檔。
+- 上傳後 Firebase Storage 有保存音檔。
+- 上傳後 Firestore 有保存歌曲資料、聲部資料與 `storage_path`。
+- 前端重新整理後能讀取最新歌曲與聲部。
+- 音檔能正常播放。
+
+修改畫面時，必須檢查：
+
+- 手機版畫面。
+- 電腦版畫面。
+- 按鈕文字不重疊。
+- 音量 bar 與播放條寬度正常。
+
+## 發布前檢查
+
+- 歌曲名稱正確。
+- 所有聲部都有音檔。
+- 聲部名稱顯示正確。
+- Firestore 資料能被後端讀取。
+- Firebase Storage 音檔能被後端轉成可播放的 `audio_url`。
+- 所有音檔都能播放。
+- 播放、暫停、快進、倒退、進度條正常。
+- 音量、Mute、Solo 正常。
+- 管理者介面可以成功上傳。
+- 手機版與電腦版畫面正常。
+
+## 待確認資訊
+
+實作 Firebase 前，需向使用者確認：
+
+- Firebase 專案 ID。
+- Firebase Storage bucket 名稱。
+- 後端要使用的 Firebase Admin service account 設定方式。
+- 管理者介面是否需要簡單密碼保護；若未確認，先不加入登入系統。

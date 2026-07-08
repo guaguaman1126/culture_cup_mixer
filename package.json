@@ -1,0 +1,16 @@
+{
+  "name": "choir-practice",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Choir practice mixer with Firebase-backed song uploads.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.18.2",
+    "firebase-admin": "^14.1.0",
+    "multer": "^2.0.0"
+  }
+}
