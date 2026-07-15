@@ -144,7 +144,8 @@ app.post("/api/song/current", requireAdmin, async (req, res) => {
 app.post("/api/song/tracks", requireAdmin, async (req, res) => {
   try {
     const songId = String(req.body.song_id ?? "").trim();
-    const tracks = Array.isArray(req.body.tracks)
+    const hasTrackList = Array.isArray(req.body.tracks);
+    const tracks = hasTrackList
       ? req.body.tracks.map((track) => ({
           id: track?.id,
           name: String(track?.name ?? "").trim(),
@@ -153,7 +154,7 @@ app.post("/api/song/tracks", requireAdmin, async (req, res) => {
       : [];
 
     if (
-      !(songId && tracks.length) ||
+      !(songId && hasTrackList) ||
       tracks.some(
         (track, index) =>
           !isTrackId(track.id) || !track.name || !Number.isInteger(track.order) || track.order !== index + 1,
@@ -197,6 +198,15 @@ app.post("/api/song/tracks", requireAdmin, async (req, res) => {
     const submittedIds = new Set(tracks.map((track) => track.id));
     const deletedTracks = storedTracks.filter((track) => !submittedIds.has(track.data.id));
     deletedTracks.forEach((track) => batch.delete(track.ref));
+    let currentSongId;
+    if (!tracks.length) {
+      currentSongId = await getCurrentSongId(db);
+      batch.delete(songRef);
+      if (currentSongId === songId) {
+        currentSongId = (await listSongs(db)).find((song) => song.id !== songId)?.id ?? null;
+        batch.set(db.doc("info/site"), { current: currentSongId }, { merge: true });
+      }
+    }
     await batch.commit();
 
     await Promise.all(
@@ -209,7 +219,13 @@ app.post("/api/song/tracks", requireAdmin, async (req, res) => {
       }),
     );
 
-    res.json({ ok: true, track_count: tracks.length, deleted_count: deletedTracks.length });
+    res.json({
+      ok: true,
+      song_deleted: !tracks.length,
+      current_song_id: currentSongId,
+      track_count: tracks.length,
+      deleted_count: deletedTracks.length,
+    });
   } catch (error) {
     sendApiError(res, error);
   }

@@ -11,7 +11,10 @@ const state = {
   displayedSongId: null,
   songs: [],
   tracks: [],
-  trackOrderIds: [],
+  managedSongId: null,
+  managedTitle: "",
+  managedTracks: [],
+  managedTrackOrderIds: [],
   audios: new Map(),
   isPlaying: false,
   isAudioReady: false,
@@ -51,6 +54,8 @@ const els = {
   currentSongForm: document.querySelector("#current-song-form"),
   currentSongSelect: document.querySelector("#current-song-select"),
   currentSongStatus: document.querySelector("#current-song-status"),
+  managedSongSelect: document.querySelector("#managed-song-select"),
+  managedSongStatus: document.querySelector("#managed-song-status"),
   trackOrderList: document.querySelector("#track-order-list"),
   trackOrderSave: document.querySelector("#track-order-save"),
   trackOrderStatus: document.querySelector("#track-order-status"),
@@ -88,6 +93,7 @@ function bindEvents() {
   els.adminPasswordDialog.addEventListener("close", resetAdminPasswordDialog);
   els.uploadForm.addEventListener("submit", uploadSong);
   els.currentSongForm.addEventListener("submit", switchCurrentSong);
+  els.managedSongSelect.addEventListener("change", switchManagedSong);
   els.trackOrderList.addEventListener("click", handleTrackInfoClick);
   els.trackOrderSave.addEventListener("click", saveTrackInfo);
 }
@@ -119,7 +125,6 @@ async function loadSong(songId = "") {
     state.displayedSongId = song.song_id ?? song.current_song_id;
     state.songs = normalizeSongs(song.songs);
     state.tracks = normalizeTracks(song.tracks);
-    state.trackOrderIds = state.tracks.map((track) => track.id);
     setupAudios();
     renderSong();
     return true;
@@ -134,11 +139,62 @@ async function loadSong(songId = "") {
     state.displayedSongId = null;
     state.songs = [];
     state.tracks = [];
-    state.trackOrderIds = [];
     renderSong();
     els.status.textContent = "無法讀取 /api/song，請確認 server.js 是否正在執行。";
     return false;
   }
+}
+
+async function loadManagedSong(songId = "") {
+  if (!songId) {
+    state.managedSongId = null;
+    state.managedTitle = "";
+    state.managedTracks = [];
+    state.managedTrackOrderIds = [];
+    els.uploadForm.reset();
+    renderManagedSongOptions();
+    renderTrackOrder();
+    els.managedSongStatus.textContent = "新增歌曲模式";
+    els.uploadStatus.textContent = "尚未上傳";
+    return true;
+  }
+
+  els.managedSongSelect.disabled = true;
+  els.managedSongStatus.textContent = "正在讀取歌曲資料";
+  els.trackOrderList.innerHTML = "";
+  els.trackOrderSave.disabled = true;
+  els.trackOrderStatus.textContent = "正在讀取聲部資訊";
+
+  try {
+    const response = await fetch(`${API_URL}?song_id=${encodeURIComponent(songId)}`);
+    if (!response.ok) throw new Error("managed song unavailable");
+
+    const song = await response.json();
+    state.managedSongId = song.song_id;
+    state.managedTitle = song.title;
+    state.managedTracks = normalizeTracks(song.tracks);
+    state.managedTrackOrderIds = state.managedTracks.map((track) => track.id);
+    els.adminTitle.value = state.managedTitle;
+    renderManagedSongOptions();
+    renderTrackOrder();
+    els.managedSongStatus.textContent = `正在管理：${state.managedTitle}`;
+    return true;
+  } catch {
+    els.managedSongStatus.textContent = "無法讀取這首歌曲，請稍後再試。";
+    renderManagedSongOptions();
+    return false;
+  } finally {
+    els.managedSongSelect.disabled = false;
+  }
+}
+
+async function refreshSongs() {
+  const response = await fetch(SONGS_URL);
+  if (!response.ok) throw new Error("songs unavailable");
+
+  state.songs = normalizeSongs((await response.json()).songs);
+  renderCurrentSongOptions();
+  renderManagedSongOptions();
 }
 
 async function toggleSongPicker() {
@@ -261,16 +317,11 @@ function renderLoading() {
   els.title.textContent = "載入中";
   els.status.textContent = "讀取音檔中";
   els.tracksList.innerHTML = "";
-  els.trackOrderList.innerHTML = "";
-  els.trackOrderSave.disabled = true;
-  els.trackOrderStatus.textContent = "正在讀取聲部資訊";
 }
 
 function renderSong() {
   els.title.textContent = state.title;
-  els.adminTitle.value = state.title === "讀取歌曲失敗" ? "" : state.title;
   renderCurrentSongOptions();
-  renderTrackOrder();
   els.resetVolumes.disabled = !state.tracks.length;
 
   if (!state.tracks.length) {
@@ -313,13 +364,23 @@ function renderCurrentSongOptions() {
   els.currentSongStatus.textContent = "請選擇要顯示的歌曲";
 }
 
+function renderManagedSongOptions() {
+  els.managedSongSelect.innerHTML = [
+    `<option value="">＋ 新增歌曲</option>`,
+    ...state.songs.map((song) => `<option value="${escapeHtml(song.id)}">${escapeHtml(song.title)}</option>`),
+  ].join("");
+  els.managedSongSelect.value = state.managedSongId ?? "";
+}
+
 function renderTrackOrder(message = "") {
   const orderedTracks = getOrderedTracksForAdmin();
 
-  if (!state.currentSongId || !orderedTracks.length) {
+  if (!state.managedSongId || !orderedTracks.length) {
     els.trackOrderList.innerHTML = `<div class="empty-state">目前沒有可管理的聲部。</div>`;
     els.trackOrderSave.disabled = true;
-    els.trackOrderStatus.textContent = "上傳聲部後即可管理聲部資訊";
+    els.trackOrderStatus.textContent = state.managedSongId
+      ? "上傳聲部後即可管理聲部資訊"
+      : "請先選擇既有歌曲";
     return;
   }
 
@@ -359,11 +420,6 @@ function handleTrackInfoClick(event) {
   }
 
   if (event.target.matches("[data-delete-track]")) {
-    const items = els.trackOrderList.querySelectorAll(".track-order-item");
-    if (items.length === 1) {
-      els.trackOrderStatus.textContent = "至少需要保留一個聲部";
-      return;
-    }
     item.remove();
     updateTrackDraftOrder();
   }
@@ -371,8 +427,10 @@ function handleTrackInfoClick(event) {
 
 function updateTrackDraftOrder() {
   const items = [...els.trackOrderList.querySelectorAll(".track-order-item")];
-  state.trackOrderIds = items.map((item) => Number(item.dataset.trackId));
-  els.trackOrderStatus.textContent = "尚未儲存聲部資訊";
+  state.managedTrackOrderIds = items.map((item) => Number(item.dataset.trackId));
+  els.trackOrderStatus.textContent = items.length
+    ? "尚未儲存聲部資訊"
+    : "儲存後將刪除整首歌曲";
 }
 
 function renderTrack(track) {
@@ -613,6 +671,7 @@ async function verifyAdminPassword(event) {
     if (!response.ok) throw new Error("login failed");
 
     await loadSong();
+    await loadManagedSong(state.currentSongId);
     closeAdminPasswordDialog();
     showAdmin(true);
   } catch {
@@ -635,12 +694,25 @@ async function uploadSong(event) {
 
     if (!response.ok) throw new Error("upload failed");
 
-    els.uploadStatus.textContent = "上傳成功，已重新讀取歌曲資料";
+    const result = await response.json();
+    els.uploadStatus.textContent = "上傳成功，正在重新讀取歌曲資料";
     els.uploadForm.reset();
-    await loadSong();
+    try {
+      await refreshSongs();
+      const loaded = await loadManagedSong(result.song_id);
+      els.uploadStatus.textContent = loaded
+        ? "上傳成功"
+        : "上傳成功，但歌曲資料重新讀取失敗，請重新整理。";
+    } catch {
+      els.uploadStatus.textContent = "上傳成功，但歌曲清單重新讀取失敗，請重新整理。";
+    }
   } catch {
     els.uploadStatus.textContent = "上傳失敗，請確認 server.js 是否正常執行。";
   }
+}
+
+async function switchManagedSong() {
+  await loadManagedSong(els.managedSongSelect.value);
 }
 
 async function switchCurrentSong(event) {
@@ -660,8 +732,8 @@ async function switchCurrentSong(event) {
 
     if (!response.ok) throw new Error("switch failed");
 
-    els.currentSongStatus.textContent = "已切換歌曲，正在重新讀取資料";
     await loadSong();
+    els.currentSongStatus.textContent = "已設定置頂歌曲";
   } catch {
     els.currentSongStatus.textContent = "切換歌曲失敗，請確認 server.js 是否正常執行。";
   }
@@ -673,7 +745,16 @@ async function saveTrackInfo() {
     name: item.querySelector(".track-order-name").value.trim(),
     order: index + 1,
   }));
-  if (!(state.currentSongId && tracks.length)) return;
+  if (!state.managedSongId) return;
+
+  if (
+    !tracks.length &&
+    !window.confirm(`確定刪除「${state.managedTitle}」及其所有聲部音檔嗎？此操作無法復原。`)
+  ) {
+    state.managedTrackOrderIds = state.managedTracks.map((track) => track.id);
+    renderTrackOrder("已取消刪除歌曲");
+    return;
+  }
 
   if (tracks.some((track) => !track.name)) {
     els.trackOrderStatus.textContent = "聲部名稱不可空白";
@@ -688,24 +769,45 @@ async function saveTrackInfo() {
   els.trackOrderSave.disabled = true;
   els.trackOrderStatus.textContent = "儲存中";
 
+  let result;
   try {
     const response = await fetch(TRACKS_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        song_id: state.currentSongId,
+        song_id: state.managedSongId,
         tracks,
       }),
     });
 
     if (!response.ok) throw new Error("track update failed");
 
-    els.trackOrderStatus.textContent = "已儲存聲部資訊，正在重新讀取歌曲資料";
-    await loadSong();
+    result = await response.json();
   } catch {
     els.trackOrderStatus.textContent = "儲存聲部資訊失敗，請重新整理後再試一次。";
-    els.trackOrderSave.disabled = !state.tracks.length;
+    els.trackOrderSave.disabled = !state.managedTracks.length;
+    return;
   }
+
+  if (result.song_deleted) {
+    const deletedCurrentSong = state.managedSongId === state.currentSongId;
+    await loadManagedSong();
+    try {
+      if (deletedCurrentSong) {
+        await loadSong();
+        renderManagedSongOptions();
+      } else {
+        await refreshSongs();
+      }
+      els.managedSongStatus.textContent = "歌曲與所有音檔已刪除";
+    } catch {
+      els.managedSongStatus.textContent = "歌曲已刪除，但歌曲清單重新讀取失敗，請重新整理。";
+    }
+    return;
+  }
+
+  els.trackOrderStatus.textContent = "已儲存聲部資訊，正在重新讀取歌曲資料";
+  await loadManagedSong(state.managedSongId);
 }
 
 function showAdmin(show) {
@@ -728,10 +830,10 @@ function getTrack(name) {
 }
 
 function getOrderedTracksForAdmin() {
-  const tracksById = new Map(state.tracks.map((track) => [track.id, track]));
-  const orderedTracks = state.trackOrderIds.map((trackId) => tracksById.get(trackId)).filter(Boolean);
+  const tracksById = new Map(state.managedTracks.map((track) => [track.id, track]));
+  const orderedTracks = state.managedTrackOrderIds.map((trackId) => tracksById.get(trackId)).filter(Boolean);
   const orderedTrackIds = new Set(orderedTracks.map((track) => track.id));
-  const missingTracks = state.tracks.filter((track) => !orderedTrackIds.has(track.id));
+  const missingTracks = state.managedTracks.filter((track) => !orderedTrackIds.has(track.id));
 
   return [...orderedTracks, ...missingTracks];
 }

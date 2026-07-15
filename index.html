@@ -55,46 +55,49 @@
 
     <section id="admin-view" class="view is-hidden" aria-labelledby="admin-heading">
       <section class="admin-panel">
-        <div class="section-heading">
-          <div>
-            <p class="meta-text">管理介面</p>
-          </div>
-        </div>
-
-        <form id="current-song-form" class="upload-form">
-          <h2>選擇置頂歌曲</h2>
-            <select id="current-song-select" name="song_id"></select>
-            <button class="primary-button secondary" type="submit">切換歌曲</button>
-            <p id="current-song-status" class="status-text" role="status">正在讀取歌曲清單</p>
+        <form id="current-song-form" class="upload-form admin-section" aria-labelledby="current-song-heading">
+          <h1 id="current-song-heading">置頂歌曲</h1>
+          <p class="sub-text">進入頁面後預設播放的歌曲。</p>
+          <select id="current-song-select" name="song_id" aria-labelledby="current-song-heading"></select>
+          <button class="primary-button secondary" type="submit">設定置頂歌曲</button>
+          <p id="current-song-status" class="status-text" role="status">正在讀取歌曲清單</p>
         </form>
 
-        <section class="upload-form track-order-panel" aria-labelledby="track-order-heading">
-          <h2 id="track-order-heading">聲部資訊</h2>
-          <div id="track-order-list" class="track-order-list"></div>
-          <button id="track-order-save" class="primary-button secondary" type="button">儲存聲部資訊</button>
-          <p id="track-order-status" class="status-text" role="status">正在讀取聲部資訊</p>
+      </section>
+
+      <section class="admin-panel">
+        <section class="upload-form admin-section song-manager" aria-labelledby="admin-heading">
+          <h1 id="admin-heading">管理歌曲資料</h1>
+          <h2 id="managed-song-heading">選擇要管理的歌曲</h2>
+          <select id="managed-song-select" aria-labelledby="managed-song-heading"></select>
+          <p id="managed-song-status" class="status-text" role="status">正在讀取歌曲資料</p>
+
+          <section class="upload-form track-order-panel" aria-labelledby="track-order-heading">
+            <h2 id="track-order-heading">聲部資訊</h2>
+            <div id="track-order-list" class="track-order-list"></div>
+            <button id="track-order-save" class="primary-button secondary" type="button">儲存聲部資訊</button>
+            <p id="track-order-status" class="status-text" role="status">正在讀取聲部資訊</p>
+          </section>
         </section>
 
-        <form id="upload-form" class="upload-form">
+        <form id="upload-form" class="upload-form admin-section" aria-labelledby="upload-heading">
+          <h2 id="upload-heading">上傳歌曲與聲部音檔</h2>
 
-          <h2 id="admin-heading">上傳歌曲與聲部音檔</h2>
-
-
-
-          <label>
-            <span>歌曲名稱</span>
+          <div class="form-field">
+            <p><label for="admin-title">歌曲名稱</label></p>
             <input id="admin-title" name="title" type="text" autocomplete="off" required>
-          </label>
+          </div>
 
-          <label>
-            <span>聲部名稱</span>
-            <input name="track_name" type="text" placeholder="例如 soprano、alto、tempo" autocomplete="off" required>
-          </label>
+          <div class="form-field">
+            <p><label for="admin-track-name">聲部名稱</label></p>
+            <input id="admin-track-name" name="track_name" type="text" placeholder="例如 soprano、alto、tempo"
+              autocomplete="off" required>
+          </div>
 
-          <label>
-            <span>音檔</span>
-            <input name="audio" type="file" accept="audio/*" required>
-          </label>
+          <div class="form-field">
+            <p><label for="admin-audio">音檔</label></p>
+            <input id="admin-audio" name="audio" type="file" accept="audio/*" required>
+          </div>
 
           <button class="primary-button" type="submit">上傳</button>
           <p id="upload-status" class="status-text" role="status">尚未上傳</p>
