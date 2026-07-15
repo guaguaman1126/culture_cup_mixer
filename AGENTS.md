@@ -42,21 +42,23 @@ choir-practice/
 - 播放進度條。
 - 目前時間與總長度。
 - 播放與暫停按鈕。
-- 往前跳轉 `10` 秒按鈕。
-- 往後跳轉 `10` 秒按鈕。
+- 往前跳轉 `5` 秒按鈕。
+- 往後跳轉 `5` 秒按鈕。
 - 每個聲部一條音量 bar。
 - 每個聲部一個 `Mute` 按鈕。
 - 每個聲部一個 `Solo` 按鈕。
 - 右上角有切換到管理者介面的按鈕。
+- 「目前歌曲」區塊有「切換歌曲」按鈕，按下後以彈窗顯示歌曲清單，讓一般使用者在自己的頁面播放其他歌曲。
 
 前端要從後端 API 取得目前歌曲資料與聲部音檔，不要把歌曲資料寫死在 HTML 裡。
+一般使用者切換歌曲只影響自己的頁面，不更新 `info/site.current`；重新整理後仍顯示管理者設定的目前歌曲。
 
 ## 播放邏輯
 
 - 所有聲部音檔要同步播放、暫停與跳轉。
 - 拖曳進度條時，所有聲部都要跳到同一個時間。
-- 往前跳轉 `10` 秒不可小於 `0` 秒。
-- 往後跳轉 `10` 秒不可超過歌曲總長度。
+- 往前跳轉 `5` 秒不可小於 `0` 秒。
+- 往後跳轉 `5` 秒不可超過歌曲總長度。
 - 每個聲部音量 bar 控制該聲部的一般播放音量。
 - `Mute` 只影響被靜音的聲部。
 - `Solo` 不要把其他聲部完全靜音。
@@ -74,6 +76,9 @@ choir-practice/
 - 聲部名稱。
 - 對應音檔。
 - 上傳按鈕。
+- 目前歌曲的聲部名稱、順序與刪除管理。
+
+聲部管理使用 `SortableJS`，只能按住 `↕` 把手拖曳。拖曳、改名與刪除都只調整前端草稿，必須按下「儲存聲部資訊」才把完整的 `id`、`name`、`order` 清單交給後端。後端以缺少的穩定 `id` 判斷要刪除的聲部。
 
 管理者可重複新增多個聲部音檔。每個音檔都必須填寫聲部名稱可以自訂，例如：
 
@@ -94,7 +99,7 @@ choir-practice/
 
 - 接收管理者介面上傳的歌曲名稱、聲部名稱與音檔。
 - 將音檔存進 Firebase Storage。
-- 將歌曲名稱、聲部名稱、音檔在 Storage 裡的 `storage_path`、更新時間等資訊存進 Firestore。
+- 將歌曲名稱、聲部名稱、音檔在 Storage 裡的 `storage_path` 等資訊存進 Firestore。
 - 提供 API 給前端讀取目前歌曲與所有聲部資訊。
 - 避免讓前端直接持有 Firebase Admin 權限。
 
@@ -104,7 +109,7 @@ choir-practice/
 
 Firebase 是整套後端平台，不是單一資料庫。本專案使用其中兩個服務：
 
-- Firestore：Firebase 裡的資料庫，用來保存歌曲名稱、聲部名稱、音檔位置與更新時間。
+- Firestore：Firebase 裡的資料庫，用來保存歌曲名稱、聲部名稱與音檔位置。
 - Firebase Storage：Firebase 裡的檔案儲存空間，用來保存 `mp3`、`wav` 等音檔。
 
 本專案資料分工如下：
@@ -113,55 +118,99 @@ Firebase 是整套後端平台，不是單一資料庫。本專案使用其中�
 - 歌曲資料、聲部名稱、音檔位置：存放在 Firestore。
 - 前端資料來源：只呼叫 `server.js` 提供的 API。
 
-Firestore 只保存管理用資料，不保存前端播放用網址，也不保存音檔本身。資料至少包含：
+Firestore 只保存管理用資料，不保存前端播放用網址，也不保存音檔本身。Firestore 另外使用 `info/site.current` 保存目前前端要顯示的歌曲 ID。
+
+聲部資料至少包含：
 
 ```json
 {
+  "id": 1,
   "name": "soprano",
-  "storage_path": "songs/current/soprano.mp3",
-  "volume": 0.8
+  "storage_path": "songs/{song_id}/soprano.mp3",
+  "volume": 0.8,
+  "order": 1
 }
 ```
+
+`id` 是每首歌曲內從 `1` 開始自動產生的穩定正整數，不因 `order` 改變而重新編號。新增聲部使用目前最大 `id + 1`，更新同名聲部則保留原本的 `id`。所有聲部都必須在上傳時寫入 `id`，讀取 API 不負責補資料。
 
 `storage_path` 是後端在 Firebase Storage 裡找檔案的位置，例如：
 
 ```text
-songs/current/soprano.mp3
+songs/{song_id}/soprano.mp3
 ```
 
 不要在 Firestore 同時保存 `file_url` 和 `storage_path`。`file_url` 是前端可播放網址，容易和 Storage 裡的實際檔案位置不同步，所以本專案資料庫只保存 `storage_path`。
 
-`GET /api/song` 回傳給前端時，由 `server.js` 把 `storage_path` 轉成前端可播放的 `audio_url`：
+`GET /api/song` 會先讀取 `info/site.current`，用這個欄位的值找出目前歌曲：
 
 ```json
 {
+  "current": "{song_id}"
+}
+```
+
+找到目前歌曲後，`server.js` 會讀取 `songs/{song_id}` 與 `songs/{song_id}/tracks/{track_key}`。`track_key` 沿用聲部名稱產生的 Firestore 文件名稱，數字 `id` 則保存在文件內容。回傳給前端時，再由 `server.js` 把 `storage_path` 轉成前端可播放的 `audio_url`：
+
+```json
+{
+  "id": 1,
   "name": "soprano",
   "audio_url": "https://...",
-  "volume": 0.8
+  "volume": 0.8,
+  "order": 1
 }
 ```
 
 Firestore 建議結構：
 
 ```text
-songs/current
-songs/current/tracks/{track_id}
+info/site
+  current: "{song_id}"
+
+songs/{song_id}
+  title
+
+songs/{song_id}/tracks/{track_key}
+  id
+  name
+  storage_path
+  volume
+  order
 ```
 
 Firebase Storage 建議結構：
 
 ```text
-songs/current/{track_name}.mp3
+songs/{song_id}/{track_key}.mp3
 ```
 
-同一時間以前端顯示一首目前指定曲為主，不需要先做多年度、多歌曲清單、Realtime Database 或搜尋功能。
+同一時間以前端顯示 `info/site.current` 指向的一首目前指定曲為主。Firestore 可以保留多首 `songs/{song_id}` 供管理介面切換，但不需要先做多年度、Realtime Database 或搜尋功能。
 
 ## API 建議
 
 `server.js` 至少提供：
 
 - `GET /api/song`：取得目前歌曲名稱與所有聲部資料。
-- `POST /api/song`：上傳或更新歌曲名稱與聲部音檔。
+- `GET /api/song?song_id={song_id}`：取得指定歌曲與所有聲部資料，不更新 `info/site.current`。
+- `GET /api/songs`：取得所有歌曲的 ID 與名稱。
+- `POST /api/song`：上傳或更新歌曲名稱與聲部音檔，不更新 `info/site.current`。
+- `POST /api/song/current`：更新 `info/site.current`，切換目前前端顯示的歌曲。
+- `POST /api/song/tracks`：以完整清單更新目前歌曲的聲部名稱與順序，並刪除未出現在清單中的聲部。
+
+`POST /api/song/tracks` 使用完整的聲部資訊清單：
+
+```json
+{
+  "song_id": "{song_id}",
+  "tracks": [
+    { "id": 3, "name": "alto", "order": 1 },
+    { "id": 1, "name": "soprano", "order": 2 }
+  ]
+}
+```
+
+清單中的 `id` 必須已存在且不可重複，`name` 不可空白或重複，`order` 必須從 `1` 連續排列。後端更新仍存在的文件，刪除清單中缺少的文件，並清理其 `storage_path` 音檔。改名只更新 `name`，不改動穩定 `id`、Firestore 文件名稱或既有 Storage 路徑。
 
 `POST /api/song` 可使用 `multipart/form-data`，欄位包含：
 
@@ -170,6 +219,8 @@ songs/current/{track_name}.mp3
 - `audio`：音檔。
 
 若一次上傳多個聲部，也可以使用陣列欄位，但實作要保持簡單清楚。
+
+上傳歌曲、新增聲部與更新同名歌曲都只負責保存資料，不可改動 `info/site.current`。若目前尚未設定指定曲，必須由管理者使用 `POST /api/song/current` 手動設定。
 
 
 ## 音檔規範
@@ -198,8 +249,8 @@ songs/current/{track_name}.mp3
 - 播放。
 - 暫停。
 - 拖曳進度條。
-- 往前跳轉 `10` 秒。
-- 往後跳轉 `10` 秒。
+- 往前跳轉 `5` 秒。
+- 往後跳轉 `5` 秒。
 - 各聲部音量 bar。
 - `Mute`。
 - `Solo`：Solo 聲部為 `90%`，其他聲部為 `20%`。
@@ -212,9 +263,13 @@ songs/current/{track_name}.mp3
 - 可輸入聲部名稱。
 - 可上傳音檔。
 - 上傳後 Firebase Storage 有保存音檔。
-- 上傳後 Firestore 有保存歌曲資料、聲部資料與 `storage_path`。
+- 上傳後 Firestore 有保存歌曲資料、聲部的穩定數字 `id`、`storage_path`，且 `info/site.current` 維持不變。
 - 前端重新整理後能讀取最新歌曲與聲部。
 - 音檔能正常播放。
+- 聲部順序可儲存，播放介面重新整理後仍照 `order` 顯示。
+- 聲部改名後播放介面與再次上傳同名聲部都使用新名稱。
+- 刪除聲部後 Firestore 文件與 Firebase Storage 音檔都移除。
+- 調整順序後聲部 `id` 維持不變；新聲部使用目前最大 `id + 1`。
 
 修改畫面時，必須檢查：
 

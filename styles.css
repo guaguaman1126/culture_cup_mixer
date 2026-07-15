@@ -102,7 +102,16 @@ input:disabled {
 }
 
 .song-panel {
+  position: relative;
   padding: clamp(26px, 5vw, 48px);
+  padding-bottom: 80px;
+}
+
+.song-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .song-panel h1 {
@@ -110,6 +119,15 @@ input:disabled {
   font-size: clamp(40px, 7vw, 72px);
   line-height: 1.05;
   letter-spacing: 0;
+}
+
+#song-picker-toggle {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 14px;
 }
 
 .meta-text,
@@ -121,6 +139,12 @@ input:disabled {
 
 .meta-text {
   font-size: 15px;
+}
+
+.song-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
 }
 
 .transport-panel {
@@ -181,6 +205,11 @@ input[type="range"] {
   font-weight: 650;
 }
 
+#reset-volumes {
+  background: var(--accent);
+  color: #ffffff;
+}
+
 .primary-button:hover,
 .ghost-button:hover,
 .small-button:hover {
@@ -217,10 +246,10 @@ input[type="range"] {
 
 .track-card {
   display: grid;
-  grid-template-columns: minmax(110px, 180px) 1fr auto;
-  gap: 18px;
+  grid-template-columns: clamp(36px, 8vw, 70px) clamp(64px, 12vw, 90px) minmax(60px, 1fr) auto;
+  gap: clamp(8px, 2vw, 18px);
   align-items: center;
-  padding: 22px 30px;
+  padding: clamp(10px, 2vw, 22px) clamp(12px, 3vw, 30px);
 }
 
 .track-name {
@@ -230,22 +259,31 @@ input[type="range"] {
   word-break: break-word;
 }
 
-.track-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.track-card > div,
+.track-card .volume-wrap,
+.track-card .volume-line {
+  display: contents;
 }
 
-.volume-wrap {
+.track-card .track-controls {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
-.volume-line {
-  display: grid;
-  grid-template-columns: 1fr 52px;
-  gap: 14px;
-  align-items: center;
+.track-card .small-button {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+}
+
+.track-card .meta-text {
+  display: none;
+}
+
+.track-card input[type="range"] {
+  min-width: 0;
+  width: 100%;
 }
 
 .volume-value {
@@ -271,6 +309,7 @@ input[type="range"] {
   margin-top: 24px;
 }
 
+.upload-form h2,
 .upload-form h3 {
   margin: 0;
   font-size: 24px;
@@ -285,7 +324,8 @@ input[type="range"] {
 
 .upload-form input[type="text"],
 .upload-form input[type="file"],
-.upload-form select {
+.upload-form select,
+.password-form input[type="password"] {
   width: 100%;
   min-height: 46px;
   border: 1px solid var(--line);
@@ -296,10 +336,51 @@ input[type="range"] {
 }
 
 .upload-form input:focus,
+.password-form input:focus,
 input[type="range"]:focus-visible,
 button:focus-visible {
   outline: 3px solid rgb(15 123 108 / 0.25);
   outline-offset: 2px;
+}
+
+.password-dialog,
+.song-picker-dialog {
+  width: min(420px, calc(100vw - 32px));
+  border: 0;
+  border-radius: var(--radius);
+  padding: 0;
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.password-dialog::backdrop,
+.song-picker-dialog::backdrop {
+  background: rgb(20 32 51 / 0.45);
+}
+
+.password-form,
+.song-picker-form {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.password-form h2,
+.song-picker-form h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.password-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: end;
+  gap: 10px;
 }
 
 .empty-state {
@@ -310,16 +391,94 @@ button:focus-visible {
   color: var(--muted);
 }
 
+.track-order-list {
+  display: grid;
+  gap: 10px;
+}
+
+.track-order-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+}
+
+.track-order-item.sortable-ghost {
+  opacity: 0.55;
+}
+
+.track-order-item.sortable-chosen,
+.track-order-item.sortable-drag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.drag-handle {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle {
+  color: var(--muted);
+  font-weight: 750;
+  text-align: center;
+}
+
+.track-order-name {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 750;
+}
+
+.upload-form .track-order-name[readonly] {
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  outline: 0;
+  pointer-events: none;
+}
+
+.track-order-action {
+  width: auto;
+  min-height: 36px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
   .topbar,
-  .section-heading {
+  .section-heading,
+  .song-panel-heading {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .track-card {
-    grid-template-columns: 1fr;
-    padding: 20px;
+  .track-order-item {
+    grid-template-columns: 24px minmax(48px, 1fr) auto auto;
+    gap: 4px;
+    padding: 8px;
+  }
+
+  .track-order-action {
+    width: auto;
+    padding: 4px 6px;
+    font-size: 13px;
   }
 
   .timeline-row {
@@ -340,6 +499,14 @@ button:focus-visible {
   .ghost-button,
   .small-button {
     width: 100%;
+  }
+
+  #song-picker-toggle {
+    width: auto;
+  }
+
+  .dialog-actions {
+    flex-direction: column-reverse;
   }
 }
 

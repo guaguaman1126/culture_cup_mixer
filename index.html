@@ -21,9 +21,12 @@
   <main class="app-shell">
     <section id="player-view" class="view">
       <section class="song-panel" aria-labelledby="song-title">
-        <p id="song-year" class="meta-text">目前指定曲</p>
+        <div class="song-panel-heading">
+          <p id="song-year" class="meta-text">目前歌曲</p>
+          <button id="song-picker-toggle" class="small-button" type="button" aria-expanded="false"
+            aria-controls="song-picker-dialog">切換歌曲</button>
+        </div>
         <h1 id="song-title">載入中</h1>
-        <p id="song-updated" class="sub-text">正在讀取歌曲資料</p>
       </section>
 
       <section class="transport-panel" aria-label="播放控制">
@@ -34,9 +37,9 @@
         </div>
 
         <div class="button-row">
-          <button id="backward" class="primary-button secondary" type="button">-10s</button>
+          <button id="backward" class="primary-button secondary" type="button">-5s</button>
           <button id="play-toggle" class="primary-button" type="button">播放</button>
-          <button id="forward" class="primary-button secondary" type="button">+10s</button>
+          <button id="forward" class="primary-button secondary" type="button">+5s</button>
         </div>
       </section>
 
@@ -44,6 +47,7 @@
         <div class="section-heading">
           <h2 id="tracks-heading">聲部音量</h2>
           <p id="player-status" class="status-text" role="status">等待歌曲資料</p>
+          <button id="reset-volumes" class="small-button" type="button">重設音量 80%</button>
         </div>
         <div id="tracks-list" class="tracks-list"></div>
       </section>
@@ -58,11 +62,18 @@
         </div>
 
         <form id="current-song-form" class="upload-form">
-          <h2>選擇目前顯示歌曲</h3>
+          <h2>選擇置頂歌曲</h2>
             <select id="current-song-select" name="song_id"></select>
             <button class="primary-button secondary" type="submit">切換歌曲</button>
             <p id="current-song-status" class="status-text" role="status">正在讀取歌曲清單</p>
         </form>
+
+        <section class="upload-form track-order-panel" aria-labelledby="track-order-heading">
+          <h2 id="track-order-heading">聲部資訊</h2>
+          <div id="track-order-list" class="track-order-list"></div>
+          <button id="track-order-save" class="primary-button secondary" type="button">儲存聲部資訊</button>
+          <p id="track-order-status" class="status-text" role="status">正在讀取聲部資訊</p>
+        </section>
 
         <form id="upload-form" class="upload-form">
 
@@ -92,6 +103,33 @@
     </section>
   </main>
 
+  <dialog id="song-picker-dialog" class="song-picker-dialog">
+    <section class="song-picker-form" aria-labelledby="song-picker-heading">
+      <h2 id="song-picker-heading">切換歌曲</h2>
+      <div id="song-picker" class="song-picker" aria-label="歌曲清單"></div>
+      <p id="song-picker-status" class="status-text" role="status"></p>
+      <div class="dialog-actions">
+        <button id="song-picker-cancel" class="ghost-button" type="button">取消</button>
+      </div>
+    </section>
+  </dialog>
+
+  <dialog id="admin-password-dialog" class="password-dialog">
+    <form id="admin-password-form" class="password-form">
+      <h2>管理密碼</h2>
+      <label>
+        <span>請輸入管理密碼</span>
+        <input id="admin-password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <div class="dialog-actions">
+        <button id="admin-password-cancel" class="ghost-button" type="button">取消</button>
+        <button class="primary-button" type="submit">進入</button>
+      </div>
+      <p id="admin-password-status" class="status-text" role="status"></p>
+    </form>
+  </dialog>
+
+  <script src="sortable.min.js"></script>
   <script src="app.js"></script>
 </body>
 
