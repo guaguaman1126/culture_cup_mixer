@@ -28,6 +28,8 @@ const state = {
 };
 
 const els = {
+  iosNoticeDialog: document.querySelector("#ios-notice-dialog"),
+  iosNoticeConfirm: document.querySelector("#ios-notice-confirm"),
   adminToggle: document.querySelector("#admin-toggle"),
   playerView: document.querySelector("#player-view"),
   adminView: document.querySelector("#admin-view"),
@@ -70,10 +72,13 @@ async function init() {
   bindEvents();
   setupTrackOrderSorting();
   setPlayerEnabled(false);
+  els.iosNoticeDialog.showModal();
   await loadSong();
 }
 
 function bindEvents() {
+  els.iosNoticeConfirm.addEventListener("click", () => els.iosNoticeDialog.close());
+  els.iosNoticeDialog.addEventListener("cancel", (event) => event.preventDefault());
   els.adminToggle.addEventListener("click", () => {
     if (els.adminView.classList.contains("is-hidden")) {
       openAdminPasswordDialog();
