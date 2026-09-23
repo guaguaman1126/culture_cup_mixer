@@ -3,7 +3,6 @@ const SONGS_URL = "/api/songs";
 const CURRENT_SONG_URL = "/api/song/current";
 const ADMIN_LOGIN_URL = "/api/admin/login";
 const TRACKS_URL = "/api/song/tracks";
-const AUDIO_READY_STATE = 4;
 
 const state = {
   title: "尚未設定歌曲",
@@ -15,11 +14,15 @@ const state = {
   managedTitle: "",
   managedTracks: [],
   managedTrackOrderIds: [],
-  audios: new Map(),
+  audioContext: null,
+  buffers: new Map(),
+  sources: new Map(),
+  gains: new Map(),
+  position: 0,
+  startedAt: 0,
   isPlaying: false,
   isAudioReady: false,
   audioLoadId: 0,
-  pendingAudioNames: new Set(),
   audioLoadFailed: false,
   timer: 0,
 };
@@ -273,38 +276,41 @@ function normalizeTracks(tracks = []) {
     .filter((track) => Number.isInteger(track.id) && track.id > 0 && track.name && track.audioUrl);
 }
 
-function setupAudios() {
-  stopTimer();
-  state.audios.forEach((audio) => audio.pause());
-  state.audios.clear();
-  state.isPlaying = false;
+async function setupAudios() {
+  pauseAll();
+  state.position = 0;
+  state.buffers.clear();
   state.isAudioReady = false;
   state.audioLoadFailed = false;
   state.audioLoadId += 1;
-  state.pendingAudioNames = new Set(state.tracks.map((track) => track.name));
-
   const loadId = state.audioLoadId;
 
-  state.tracks.forEach((track) => {
-    const audio = new Audio(track.audioUrl);
-    audio.preload = "auto";
-    audio.addEventListener("loadedmetadata", () => {
-      if (loadId !== state.audioLoadId) return;
-      updateDuration();
-      markAudioReadyIfPossible(track.name, audio, loadId);
-    });
-    audio.addEventListener("loadeddata", () => markAudioReadyIfPossible(track.name, audio, loadId));
-    audio.addEventListener("canplay", () => markAudioReadyIfPossible(track.name, audio, loadId));
-    audio.addEventListener("canplaythrough", () => markAudioReady(track.name, loadId));
-    audio.addEventListener("error", () => handleAudioLoadError(loadId));
-    audio.addEventListener("ended", handleEnded);
-    state.audios.set(track.name, audio);
-    audio.load();
-    markAudioReadyIfPossible(track.name, audio, loadId);
-  });
-
-  applyVolumes();
   updatePlayerAvailability();
+
+  if (!state.tracks.length) return;
+
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) throw new Error("Web Audio API unavailable");
+    state.audioContext ??= new AudioContextClass();
+
+    const buffers = await Promise.all(
+      state.tracks.map(async (track) => {
+        const response = await fetch(track.audioUrl);
+        if (!response.ok) throw new Error("audio unavailable");
+        return [track.name, await state.audioContext.decodeAudioData(await response.arrayBuffer())];
+      }),
+    );
+
+    if (loadId !== state.audioLoadId) return;
+    state.buffers = new Map(buffers);
+    state.isAudioReady = true;
+    updateDuration();
+    updatePlayerAvailability();
+  } catch (error) {
+    console.error("Audio load failed:", error);
+    handleAudioLoadError(loadId);
+  }
 }
 
 function renderLoading() {
@@ -467,13 +473,10 @@ async function togglePlay() {
     return;
   }
 
-  const current = getCurrentTime();
-  state.audios.forEach((audio) => {
-    audio.currentTime = current;
-  });
-
   try {
-    await Promise.all([...state.audios.values()].map((audio) => audio.play()));
+    await state.audioContext.resume();
+    if (state.position >= getDuration()) state.position = 0;
+    startSources();
     state.isPlaying = true;
     updatePlayButtonText();
     startTimer();
@@ -483,10 +486,45 @@ async function togglePlay() {
 }
 
 function pauseAll() {
-  state.audios.forEach((audio) => audio.pause());
+  if (state.isPlaying) state.position = getCurrentTime();
+  stopSources();
   state.isPlaying = false;
   updatePlayButtonText();
   stopTimer();
+}
+
+function startSources() {
+  stopSources();
+  const startAt = state.audioContext.currentTime + 0.1;
+
+  state.tracks.forEach((track) => {
+    const buffer = state.buffers.get(track.name);
+    if (!buffer || state.position >= buffer.duration) return;
+
+    const source = state.audioContext.createBufferSource();
+    const gain = state.audioContext.createGain();
+    source.buffer = buffer;
+    gain.gain.value = track.muted ? 0 : track.volume;
+    source.connect(gain);
+    gain.connect(state.audioContext.destination);
+    source.start(startAt, state.position);
+    state.sources.set(track.name, source);
+    state.gains.set(track.name, gain);
+  });
+
+  state.startedAt = startAt;
+}
+
+function stopSources() {
+  state.sources.forEach((source) => {
+    try {
+      source.stop();
+    } catch {
+      // Source may already have ended.
+    }
+  });
+  state.sources.clear();
+  state.gains.clear();
 }
 
 function seekBy(seconds) {
@@ -494,9 +532,8 @@ function seekBy(seconds) {
 }
 
 function seekTo(seconds) {
-  state.audios.forEach((audio) => {
-    audio.currentTime = seconds;
-  });
+  state.position = clamp(seconds, 0, getDuration());
+  if (state.isPlaying) startSources();
   updateProgress();
 }
 
@@ -537,14 +574,8 @@ function setSolo(event) {
 
 function applyVolumes() {
   state.tracks.forEach((track) => {
-    const audio = state.audios.get(track.name);
-    if (!audio) return;
-
-    if (track.muted) {
-      audio.volume = 0;
-    } else {
-      audio.volume = track.volume;
-    }
+    const gain = state.gains.get(track.name);
+    if (gain) gain.gain.value = track.muted ? 0 : track.volume;
   });
 }
 
@@ -557,6 +588,10 @@ function updateDuration() {
 
 function updateProgress() {
   const current = getCurrentTime();
+  if (state.isPlaying && current >= getDuration()) {
+    handleEnded();
+    return;
+  }
   els.progress.value = current;
   els.currentTime.textContent = formatTime(current);
 }
@@ -572,27 +607,9 @@ function stopTimer() {
 }
 
 function handleEnded() {
-  if (getCurrentTime() >= getDuration() - 0.2) {
-    pauseAll();
-    seekTo(0);
-  }
-}
-
-function markAudioReadyIfPossible(trackName, audio, loadId) {
-  if (audio.readyState >= AUDIO_READY_STATE) {
-    markAudioReady(trackName, loadId);
-  }
-}
-
-function markAudioReady(trackName, loadId) {
-  if (loadId !== state.audioLoadId || state.audioLoadFailed || state.isAudioReady) return;
-
-  state.pendingAudioNames.delete(trackName);
-
-  if (state.pendingAudioNames.size > 0) return;
-
-  state.isAudioReady = state.tracks.length > 0;
-  updatePlayerAvailability();
+  pauseAll();
+  state.position = 0;
+  updateProgress();
 }
 
 function handleAudioLoadError(loadId) {
@@ -839,14 +856,13 @@ function getOrderedTracksForAdmin() {
 }
 
 function getCurrentTime() {
-  const firstAudio = state.audios.values().next().value;
-  return firstAudio ? firstAudio.currentTime : 0;
+  if (!state.isPlaying || !state.audioContext) return state.position;
+  const elapsed = Math.max(0, state.audioContext.currentTime - state.startedAt);
+  return clamp(state.position + elapsed, 0, getDuration());
 }
 
 function getDuration() {
-  const durations = [...state.audios.values()]
-    .map((audio) => audio.duration)
-    .filter(Number.isFinite);
+  const durations = [...state.buffers.values()].map((buffer) => buffer.duration);
   return durations.length ? Math.max(...durations) : 0;
 }
 

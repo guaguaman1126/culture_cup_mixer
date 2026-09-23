@@ -10,7 +10,6 @@ const { getStorage } = require("firebase-admin/storage");
 
 const app = express();
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-const SIGNED_URL_MS = 24 * 60 * 60 * 1000;
 const ADMIN_COOKIE = "admin_auth";
 const ADMIN_SESSION_MS = 60 * 60 * 1000;
 const adminSessionSecret = crypto.randomBytes(32).toString("hex");
@@ -36,6 +35,38 @@ app.get("/sortable.min.js", (req, res) => {
 });
 app.use("/public", express.static(path.join(__dirname, "public")));
 
+app.get("/api/audio", async (req, res) => {
+  try {
+    const songId = String(req.query.song_id ?? "").trim();
+    const trackKey = String(req.query.track_key ?? "").trim();
+    if (!(songId && trackKey) || songId.includes("/") || trackKey.includes("/")) {
+      res.status(400).json({ error: "song_id_track_key_required" });
+      return;
+    }
+
+    const { db, bucket } = getFirebase();
+    const trackDoc = await db.collection("songs").doc(songId).collection("tracks").doc(trackKey).get();
+    const storagePath = trackDoc.exists ? trackDoc.data().storage_path : "";
+    if (!storagePath) {
+      res.status(404).json({ error: "audio_not_found" });
+      return;
+    }
+
+    const file = bucket.file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) {
+      res.status(404).json({ error: "audio_not_found" });
+      return;
+    }
+
+    res.type(path.extname(storagePath));
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    file.createReadStream().on("error", (error) => res.destroy(error)).pipe(res);
+  } catch (error) {
+    sendApiError(res, error);
+  }
+});
+
 app.get("/api/songs", async (req, res) => {
   try {
     const { db } = getFirebase();
@@ -47,7 +78,7 @@ app.get("/api/songs", async (req, res) => {
 
 app.get("/api/song", async (req, res) => {
   try {
-    const { db, bucket } = getFirebase();
+    const { db } = getFirebase();
     const songs = await listSongs(db);
     const currentSongId = await getCurrentSongId(db);
     const requestedSongId = String(req.query.song_id ?? "").trim();
@@ -71,22 +102,13 @@ app.get("/api/song", async (req, res) => {
     }
 
     const storedTracks = await getTracks(songRef);
-    const tracks = await Promise.all(
-      storedTracks.map(async ({ data: track }) => {
-        const [audioUrl] = await bucket.file(track.storage_path).getSignedUrl({
-          action: "read",
-          expires: Date.now() + SIGNED_URL_MS,
-        });
-
-        return {
-          id: track.id,
-          name: track.name,
-          audio_url: audioUrl,
-          volume: Number(track.volume ?? 0.8),
-          order: Number(track.order),
-        };
-      }),
-    );
+    const tracks = storedTracks.map(({ ref, data: track }) => ({
+      id: track.id,
+      name: track.name,
+      audio_url: `/api/audio?song_id=${encodeURIComponent(songRef.id)}&track_key=${encodeURIComponent(ref.id)}`,
+      volume: Number(track.volume ?? 0.8),
+      order: Number(track.order),
+    }));
 
     res.json({
       title: songDoc.data().title,
